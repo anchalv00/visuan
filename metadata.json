@@ -1,0 +1,10 @@
+{
+  "name": "Remix Visual Soundboard - Environmental Audio for Deaf \u0026 Hard of Hearing",
+  "description": "Continuous ambient audio classifier powered by Gemini Live that translates environmental, safety, and emotional sounds into high-contrast visual HUD alerts, directional radar cues, and phone haptics.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
