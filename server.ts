@@ -17,7 +17,8 @@ const wss = new WebSocketServer({ server, path: '/api/live' });
 
 app.use(express.json({ limit: '25mb' }));
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+// Port 3000 is required by the AI Studio environment so Nginx (listening on 8080) can proxy to it
+const PORT = 3000;
 
 // Initialize Gemini Client
 const getGeminiClient = () => {
@@ -95,64 +96,132 @@ app.post('/api/classify-audio', async (req, res) => {
 
     const ai = getGeminiClient();
 
-    const prompt = `You are a high-speed Environmental Audio Classifier specialized for Deaf and Hard of Hearing individuals.
-Analyze the provided ambient audio clip. Identify non-speech and ambient acoustic events that Deaf/HOH people must know about for safety, home awareness, and social presence.
-Key target categories:
-- Safety/Urgent: Smoke/CO detector alarms, siren, car horn, screeching tires, glass shattering, baby crying distress wail, dog aggressive growl/bark.
-- Attention/Warning: Door knocking, doorbell, microwave/oven timer, boiling kettle whistle, footsteps approaching, heavy object dropping, phone ringing.
-- Emotional/Social: Sudden crowd applause, laughter burst, cheering, door opening/closing, dog gentle whine.
-- Ambient/Context: Water running/dripping, thunder, appliance humming.
+    const features = metadata.features || {};
+    const featuresSummary = features.spectralCentroid
+      ? `\nHigher-Order Digital Acoustic Feature Measurements:
+- Spectral Centroid: ${features.spectralCentroid} Hz (High > 2400Hz: bike bells, smoke alarms; Mid 500-2200Hz: sirens, baby cries; Low < 400Hz: ambient hum)
+- Fundamental Pitch F0: ${features.pitchEstimate ? `${features.pitchEstimate} Hz` : 'Non-tonal/transient'}
+- Harmonic Energy Ratio: ${features.harmonicEnergyRatio ?? 'N/A'} (High indicates tonal siren, infant wail, alarm tone)
+- Percussive Transient Score: ${features.percussiveScore ?? 'N/A'} (High > 3.0 indicates door knock, strike, or percussive tap)
+- Spectral Flux: ${features.spectralFlux ?? 'N/A'} (High indicates fast onset or sudden transient change)
+- Spectral Rolloff: ${features.spectralRolloff ? `${features.spectralRolloff} Hz` : 'N/A'}
+- Spectral Flatness: ${features.spectralFlatness ?? 'N/A'} (Low < 0.2 indicates pure tone/harmonics like sirens or bells; High > 0.6 indicates noisy airflow)
+- MFCC Timbre Vector (12 bands): [${features.mfcc ? features.mfcc.join(', ') : 'N/A'}]
+- Acoustic Category Pre-Classification: ${features.estimatedCategoryHint || 'none'}`
+      : '';
 
-If speech is present, focus on tone/volume (e.g., shouting/screaming vs normal background chatter).
-If only silence, subtle room fan, or ambient white noise is present, set sound_type: "ambient", urgency: "subtle", sound_name: "Ambient Background", description: "Normal room background with no critical alerts".
+    const prompt = `You are a precision Environmental Audio Classifier specialized for Deaf and Hard of Hearing individuals.
+Analyze the provided ambient audio clip along with the extracted higher-order acoustic features. Identify non-speech and environmental acoustic events that Deaf and Hard of Hearing people must be aware of for safety, home awareness, and daily life.
+${featuresSummary}
 
-Directional hint from acoustic stereo analysis: ${metadata.estimatedDirection || 'unknown'}.
+Comprehensive Target Sound Catalog:
+1. SIRENS & EMERGENCY (Urgency: urgent, Type: safety):
+   - "Emergency Siren (Wail)": Classic rising and falling sinusoidal pitch sweep (police, fire truck, ambulance).
+   - "Emergency Siren (Yelp)": Rapid, fast alternating high-pitch chirp siren.
+   - "Emergency Siren (Two-Tone / Hi-Lo)": European emergency vehicle alternating hi-lo two-pitch siren.
+   - "Civil Defense / Air Raid Siren": Continuous deep mechanical rising/falling warning siren.
+   - "Building Evacuation Siren": Loud, continuous high-decibel pulsing alarm siren.
+2. BIKE BELLS & MOBILITY (Urgency: warning, Type: warning):
+   - "Bicycle Bell (Dual Ding-Dong)": Classic two-tone thumb-strike handlebar bell (bright resonant ping-pong).
+   - "Bicycle Bell (Single Ping)": High-frequency brass/metallic ping (spur bell, road bike strike bell, > 2500Hz centroid).
+   - "Rotary Bicycle Bell": Continuous mechanical whirring/rattling chime.
+   - "E-Scooter / Pedestrian Horn": Electronic chirping chime or warning beeper from electric scooters and bikes.
+3. BABY & INFANT SOUNDS (Urgency: urgent or warning, Type: biological):
+   - "Baby Crying (Distress / Pain)": High-pitched piercing wails, infant screaming, breath-holding cries (strong harmonic energy around 450Hz-1200Hz).
+   - "Baby Crying (Fussy / Hunger)": Repetitive rhythmic infant wails with breathing pauses.
+   - "Toddler Screaming / Tantrum": Loud high-frequency vocal shrieks.
+4. ALARMS & APPLIANCE TIMERS (Urgency: urgent or warning):
+   - "Smoke Alarm (T3 Temporal)": Standard NFPA 3-beep pattern (beep-beep-beep pause) at ~3kHz.
+   - "Carbon Monoxide Alarm (T4)": Repeating 4-beep pattern.
+   - "Security Alarm": Burglar alarm, window intrusion alarm, continuous alternating siren.
+   - "Kitchen Timer (Microwave)": Repeating end-of-cycle chime (single, triple, or melodic beep).
+   - "Kitchen Timer (Oven / Countdown)": Rapid continuous electronic beeping.
+5. DOOR & HOME ENTRY (Urgency: warning, Type: warning):
+   - "Door Knocking": Percussive rapping or knuckles on a wooden door, table, wall, or desk (2 to 5 brief, sharp acoustic transient knocks).
+   - "Doorbell (Ding-Dong)": Two-tone harmonic chime.
+   - "Doorbell (Electronic Melody / Intercom)": Multi-tone chime or buzzer.
+6. VEHICLE & TRAFFIC (Urgency: urgent or warning, Type: safety):
+   - "Car Honk (Urgent Blast)": Heavy vehicle horn blast, sudden automotive danger warning.
+   - "Car Honk (Double Tap)": Brief double-tap car horn.
+   - "Truck Backing-Up Beeper": Pulsed 1kHz industrial reverse beeper.
+7. HAZARDS & IMPACTS:
+   - "Glass Shattering / Breaking": High-frequency fracturing and falling shards.
+   - "Dog Barking (Aggressive / Warning)": Staccato canine barks or warning growls.
+   - "Water Running / Overflowing": Steady running faucet, splashing or boiling water.
+
+CLASSIFICATION RULES:
+- Use both the raw audio and the digital feature measurements (e.g. Spectral Centroid > 2400 Hz for bike bells/smoke alarms, Harmonic Ratio > 0.4 for sirens/crying, Percussive Score > 3.0 for door knocks).
+- If ANY siren sound is heard (wail, yelp, two-tone), immediately output the matching Emergency Siren name with urgency "urgent".
+- If a bike bell or scooter chime is heard, output the matching Bicycle Bell name with urgency "warning".
+- If an infant cry is heard, output "Baby Crying" with urgency "urgent".
+- If knuckles or knocking is heard, output "Door Knocking" with urgency "warning".
+- Only output "Ambient Background" with urgency "subtle" if the audio is purely quiet room silence, gentle fan hum, or static white noise.
+
+Directional hint: ${metadata.estimatedDirection || 'unknown'}.
 Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        {
-          inlineData: {
-            mimeType: mimeType,
-            data: audioData,
-          },
-        },
-        {
-          text: prompt,
-        },
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            sound_name: { type: Type.STRING },
-            sound_type: { type: Type.STRING },
-            urgency: { type: Type.STRING },
-            description: { type: Type.STRING },
-            direction_cue: { type: Type.STRING },
-            confidence: { type: Type.NUMBER },
-            haptic_pattern: { type: Type.STRING },
-            visual_color: { type: Type.STRING },
-          },
-          required: [
-            'sound_name',
-            'sound_type',
-            'urgency',
-            'description',
-            'direction_cue',
-            'confidence',
-            'haptic_pattern',
+    const candidateModels = ['gemini-3.5-flash', 'gemini-3.1-flash-lite-preview', 'gemini-3.8-flash'];
+    let response: any = null;
+    let usedModel = '';
+
+    for (const model of candidateModels) {
+      try {
+        response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: audioData,
+              },
+            },
+            {
+              text: prompt,
+            },
           ],
-        },
-      },
-    });
+          config: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                sound_name: { type: Type.STRING },
+                sound_type: { type: Type.STRING },
+                urgency: { type: Type.STRING },
+                description: { type: Type.STRING },
+                direction_cue: { type: Type.STRING },
+                confidence: { type: Type.NUMBER },
+                haptic_pattern: { type: Type.STRING },
+                visual_color: { type: Type.STRING },
+              },
+              required: [
+                'sound_name',
+                'sound_type',
+                'urgency',
+                'description',
+                'direction_cue',
+                'confidence',
+                'haptic_pattern',
+              ],
+            },
+          },
+        });
+        usedModel = model;
+        break;
+      } catch (err: any) {
+        console.warn(`[AudioClassifier] Model ${model} failed, trying next:`, err?.status || err?.message?.slice(0, 100));
+      }
+    }
+
+    if (!response) {
+      throw new Error('All candidate Gemini models were unavailable or quota exhausted.');
+    }
 
     const text = response.text?.trim() || '{}';
     let result;
     try {
       result = JSON.parse(text);
+      console.log(`[AudioClassifier] Analyzed (${mimeType}): ${result.sound_name} (${result.urgency})`);
     } catch {
       result = {
         sound_name: 'Sound Detected',
@@ -208,9 +277,19 @@ wss.on('connection', async (clientWs: WebSocket) => {
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: [emitAudioAlertDeclaration] }],
           systemInstruction:
-            'You are Visual Soundboard, an ambient environmental sound classifier for Deaf and Hard of Hearing users. ' +
-            'Listen continuously to the audio stream. Whenever you hear an ambient sound of interest (such as a smoke alarm, dog growling or barking, car horn, door knock, doorbell, glass breaking, baby crying, microwave/appliance beep, kettle whistle, or sudden applause/cheering), ' +
-            'immediately call the function `emit_audio_alert` with the exact sound details, urgency level, direction, and haptic rhythm. Do not wait for conversation. Prioritize safety alarms and high-urgency threats immediately.',
+            'You are Visual Soundboard, an environmental audio classifier trained specifically for Deaf and Hard of Hearing awareness. ' +
+            'Listen continuously to the ambient audio stream. Whenever you hear an ambient sound event, immediately call `emit_audio_alert`. ' +
+            'Primary target sounds to recognize without delay: ' +
+            '1. "Door Knocking": rhythmic rapping, knuckles on wood/door/table surface. ' +
+            '2. "Baby Crying": infant distress wails, high-pitched sobbing or screams. ' +
+            '3. "Smoke Alarm": 3kHz-4kHz piercing T3 beep pattern or continuous detector alarm. ' +
+            '4. "Security Alarm": burglar alarm, alternating siren horn, evacuation alarm. ' +
+            '5. "Timers" / "Timer Beeping": microwave finish beeps, oven timer, countdown electronic chirps. ' +
+            '6. "Emergency Siren": police, ambulance, fire engine wailing or yelp sirens. ' +
+            '7. "Car Honk": vehicle horn blast, sudden automotive warning. ' +
+            '8. "Bike Bell": high-pitch metallic ping, bicycle handlebar chime. ' +
+            '9. Also recognize: doorbell chime, dog barking, footsteps, glass breaking. ' +
+            'Call `emit_audio_alert` immediately upon detecting any of these sounds. Do not produce conversational speech. Respond only by triggering `emit_audio_alert`.',
         },
         callbacks: {
           onmessage: async (msg: any) => {

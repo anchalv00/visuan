@@ -34,6 +34,8 @@ export type ColorBlindMode =
 
 export type HapticSensitivity = 'off' | 'emergency_only' | 'low' | 'medium' | 'high';
 
+export type MicSensitivity = 'high' | 'medium' | 'low';
+
 export interface SoundAlert {
   id: string;
   timestamp: number;
