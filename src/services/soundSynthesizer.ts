@@ -292,6 +292,92 @@ export const playSyntheticSound = (presetId: string): Promise<void> => {
           break;
         }
 
+        case 'siren_two_tone': {
+          // European alternating two-tone hi-lo siren (440Hz / 587Hz)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          gain.gain.setValueAtTime(0.25, now);
+
+          [0, 0.45, 0.9, 1.35].forEach((offset, idx) => {
+            const freq = idx % 2 === 0 ? 587 : 440;
+            osc.frequency.setValueAtTime(freq, now + offset);
+          });
+          gain.gain.setValueAtTime(0.25, now + 1.8);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 1.95);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 2.0);
+          setTimeout(resolve, 2000);
+          break;
+        }
+
+        case 'bike_bell': {
+          // High-frequency dual ding-dong brass bell (2600Hz & 3180Hz)
+          [0, 0.28].forEach((offset, idx) => {
+            const freq = idx === 0 ? 2600 : 3180;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + offset);
+
+            gain.gain.setValueAtTime(0.4, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.6);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.65);
+          });
+          setTimeout(resolve, 1000);
+          break;
+        }
+
+        case 'timer': {
+          // Microwave / oven timer electronic beeps (3x 2800Hz beeps)
+          [0, 0.35, 0.7].forEach((offset) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(2800, now + offset);
+
+            gain.gain.setValueAtTime(0.3, now + offset);
+            gain.gain.setValueAtTime(0.3, now + offset + 0.15);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.2);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.22);
+          });
+          setTimeout(resolve, 1100);
+          break;
+        }
+
+        case 'security_alarm': {
+          // Fast alternating security intrusion alarm
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          gain.gain.setValueAtTime(0.2, now);
+
+          for (let i = 0; i < 6; i++) {
+            const f = i % 2 === 0 ? 1200 : 800;
+            osc.frequency.setValueAtTime(f, now + i * 0.25);
+          }
+          gain.gain.setValueAtTime(0.2, now + 1.4);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 1.55);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 1.6);
+          setTimeout(resolve, 1600);
+          break;
+        }
+
         default:
           resolve();
       }

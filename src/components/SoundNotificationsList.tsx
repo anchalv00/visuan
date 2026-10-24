@@ -1,7 +1,6 @@
 import React from 'react';
 import { SoundAlert } from '../types/sound';
 import {
-  AlertTriangle,
   Baby,
   Bell,
   Clock,
@@ -18,14 +17,14 @@ import {
 interface SoundNotificationsListProps {
   notifications: SoundAlert[];
   onClear: () => void;
-  onSimulateTest?: (name: string, type: any, urgency: any, desc: string) => void;
+  onOpenTester?: () => void;
   isAnalyzing?: boolean;
 }
 
 export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
   notifications,
   onClear,
-  onSimulateTest,
+  onOpenTester,
   isAnalyzing = false,
 }) => {
   // Select contextual icon based on sound name
@@ -88,7 +87,7 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
 
   return (
     <div className="w-full max-w-2xl mx-auto flex flex-col gap-4 animate-in fade-in duration-300">
-      {/* Header with Title, Analyzing Indicator and Clear Action */}
+      {/* Header with Title, Analyzing Indicator, Test Button and Clear Action */}
       <div className="flex items-center justify-between pb-3 border-b border-stone-200">
         <div className="flex items-center gap-2.5">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
@@ -111,16 +110,29 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
           )}
         </div>
 
-        {notifications.length > 0 && (
-          <button
-            type="button"
-            onClick={onClear}
-            className="flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800 px-2.5 py-1 rounded-lg hover:bg-stone-200/60 transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Clear
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onOpenTester && (
+            <button
+              type="button"
+              onClick={onOpenTester}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Test Sounds</span>
+            </button>
+          )}
+
+          {notifications.length > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="flex items-center gap-1.5 text-xs font-medium text-stone-500 hover:text-stone-800 px-2.5 py-1 rounded-lg hover:bg-stone-200/60 transition-colors cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Notifications Feed */}
@@ -132,21 +144,21 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
           <h3 className="text-base font-bold text-stone-800 mb-1">
             Listening for Sounds
           </h3>
-          <p className="text-xs sm:text-sm text-stone-500 max-w-md mb-6 leading-relaxed">
-            The microphone is continuously monitoring. When sounds occur, notifications will appear here instantly with tactile vibration.
+          <p className="text-xs sm:text-sm text-stone-500 max-w-md mb-5 leading-relaxed">
+            The microphone is continuously monitoring ambient audio. When sounds occur, notifications will appear here instantly with tactile vibration.
           </p>
 
           {/* Recognition Checklist Pills */}
           <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-lg mb-6">
             {[
-              'Door Knocking',
+              'Emergency Siren (Wail & Hi-Lo)',
               'Baby Crying',
-              'Smoke Alarm',
+              'Door Knocking',
+              'Smoke Alarm (T3)',
+              'Kitchen Timers',
+              'Bicycle Bell',
+              'Car Horn',
               'Security Alarm',
-              'Timers',
-              'Emergency Siren',
-              'Car Honk',
-              'Bike Bell',
             ].map((sound) => (
               <span
                 key={sound}
@@ -157,100 +169,16 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
             ))}
           </div>
 
-          {/* Quick Simulation Testing Triggers for Convenient Verification */}
-          {onSimulateTest && (
-            <div className="pt-4 border-t border-stone-100 w-full flex flex-col items-center">
-              <span className="text-[11px] font-semibold text-stone-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-stone-400" />
-                Quick Test Prompts
-              </span>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Door Knocking',
-                      'warning',
-                      'warning',
-                      'Knuckles rapping on wood door (3 sharp beats)'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-stone-200/80 text-stone-700 rounded-lg border border-stone-200 transition-colors cursor-pointer"
-                >
-                  Test Door Knock
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Baby Crying',
-                      'biological',
-                      'urgent',
-                      'Infant vocal distress wail detected'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-stone-200/80 text-stone-700 rounded-lg border border-stone-200 transition-colors cursor-pointer"
-                >
-                  Test Baby Crying
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Timer Beeping',
-                      'appliance',
-                      'warning',
-                      'Microwave countdown timer electronic chime'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-stone-100 hover:bg-stone-200/80 text-stone-700 rounded-lg border border-stone-200 transition-colors cursor-pointer"
-                >
-                  Test Timer
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Bicycle Bell (Dual Ding-Dong)',
-                      'warning',
-                      'warning',
-                      'High-pitch metallic handlebar bicycle bell chime (3.2kHz)'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 transition-colors cursor-pointer"
-                >
-                  Test Bike Bell
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Emergency Siren (Wail)',
-                      'safety',
-                      'urgent',
-                      'Police / ambulance wailing emergency vehicle siren with pitch sweep'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 transition-colors cursor-pointer"
-                >
-                  Test Siren
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSimulateTest(
-                      'Smoke Alarm',
-                      'safety',
-                      'urgent',
-                      'NFPA T3 temporal high-pitch 3kHz smoke detector beeps'
-                    )
-                  }
-                  className="px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg border border-rose-200 transition-colors cursor-pointer"
-                >
-                  Test Smoke Alarm
-                </button>
-              </div>
-            </div>
+          {/* Single Dedicated Test Button for Judges & Hackathon Demo */}
+          {onOpenTester && (
+            <button
+              type="button"
+              onClick={onOpenTester}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-stone-900 hover:bg-stone-800 transition-all shadow-md cursor-pointer hover:scale-[1.02] active:scale-95"
+            >
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+              <span>Test Known Sounds & Detection</span>
+            </button>
           )}
         </div>
       ) : (

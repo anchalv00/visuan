@@ -38,13 +38,13 @@ class AudioClassifierService {
 
   private lastAnalysisTime: number = 0;
   private isClassifying: boolean = false;
-  private micSensitivity: MicSensitivity = 'high'; // Default to high for maximum responsiveness
+  private micSensitivity: MicSensitivity = 'medium'; // Balanced default sensitivity
 
   public setSensitivity(sensitivity: MicSensitivity) {
     this.micSensitivity = sensitivity;
     if (this.preampGainNode && this.audioCtx) {
       this.preampGainNode.gain.setValueAtTime(
-        sensitivity === 'high' ? 4.5 : sensitivity === 'low' ? 1.5 : 3.0,
+        sensitivity === 'high' ? 2.8 : sensitivity === 'low' ? 1.15 : 1.85,
         this.audioCtx.currentTime
       );
     }
@@ -164,7 +164,7 @@ class AudioClassifierService {
       // Software pre-amplifier gain node to boost soft sounds, video audio, or distant cries
       this.preampGainNode = this.audioCtx.createGain();
       this.preampGainNode.gain.value =
-        this.micSensitivity === 'high' ? 4.5 : this.micSensitivity === 'low' ? 1.5 : 3.0;
+        this.micSensitivity === 'high' ? 2.8 : this.micSensitivity === 'low' ? 1.15 : 1.85;
 
       source.connect(this.preampGainNode);
 
@@ -368,23 +368,27 @@ class AudioClassifierService {
       const now = Date.now();
       const timeSinceLast = now - this.lastAnalysisTime;
 
-      // Continuous Responsive Analysis Trigger:
-      // High Sensitivity: classifies every 1.4s whenever any audible sound is present
-      // Medium Sensitivity: classifies every 1.8s
-      // Low Sensitivity: classifies every 2.4s
-      const minInterval = this.micSensitivity === 'high' ? 1400 : this.micSensitivity === 'low' ? 2400 : 1800;
+      // Calibrated Gating Thresholds per sensitivity level:
+      // High: triggers on audible sound > 27 dB or maxPeak > 5
+      // Medium (default): triggers on clear sound > 31 dB or maxPeak > 7
+      // Low: triggers on louder sounds > 38 dB or maxPeak > 12
+      const dbThreshold = this.micSensitivity === 'high' ? 27 : this.micSensitivity === 'low' ? 38 : 31;
+      const peakThreshold = this.micSensitivity === 'high' ? 5 : this.micSensitivity === 'low' ? 12 : 7;
+      const minInterval = this.micSensitivity === 'high' ? 1100 : this.micSensitivity === 'low' ? 2000 : 1400;
 
-      // Smart acoustic signature trigger using extracted spectral centroid and MFCC hint
+      // Smart acoustic signature triggers
       const isAcousticTarget = features.estimatedCategoryHint !== 'ambient';
-      const isTransientKnock = features.percussiveScore > (this.micSensitivity === 'high' ? 3.0 : 4.5);
-      const hasAudibleSound = db > 22 || maxPeak > 3 || features.spectralCentroid > 500;
+      const isTransientKnock =
+        features.percussiveScore > (this.micSensitivity === 'high' ? 2.8 : this.micSensitivity === 'low' ? 3.8 : 3.2) &&
+        maxPeak > 6;
+      const hasAudibleSound = db >= dbThreshold || maxPeak >= peakThreshold;
 
       if (
-        ((isAcousticTarget && timeSinceLast > 1100) ||
-          (isTransientKnock && timeSinceLast > 1000) ||
+        ((isAcousticTarget && timeSinceLast > 900) ||
+          (isTransientKnock && timeSinceLast > 900) ||
           (hasAudibleSound && timeSinceLast > minInterval)) &&
         !this.isClassifying &&
-        this.samplesRecorded >= this.SAMPLE_RATE * 0.8
+        this.samplesRecorded >= this.SAMPLE_RATE * 0.7
       ) {
         this.analyzeCurrentChunk(estimatedDirection, db, features);
       }

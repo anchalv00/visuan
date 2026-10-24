@@ -9,8 +9,10 @@ import { audioClassifier, AudioMetrics } from './services/audioClassifier';
 import { triggerHaptic } from './services/haptics';
 import { ListenButton, StopOvalButton } from './components/MicrophoneController';
 import { SoundNotificationsList } from './components/SoundNotificationsList';
+import { SoundTesterModal } from './components/SoundTesterModal';
 import { SettingsModal } from './components/SettingsModal';
-import { SlidersHorizontal, Volume2 } from 'lucide-react';
+import { AudioDisclaimerModal } from './components/AudioDisclaimerModal';
+import { SlidersHorizontal, Sparkles, Volume2 } from 'lucide-react';
 
 const STORAGE_KEY_SENSITIVITY = 'visual_soundboard_sensitivity';
 const STORAGE_KEY_NOTIFICATIONS = 'visual_soundboard_notifications';
@@ -18,6 +20,8 @@ const STORAGE_KEY_NOTIFICATIONS = 'visual_soundboard_notifications';
 export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [isTesterOpen, setIsTesterOpen] = useState(false);
+  const [isDisclaimerOpen, setIsDisclaimerOpen] = useState(false);
   const [notifications, setNotifications] = useState<SoundAlert[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
@@ -30,9 +34,9 @@ export default function App() {
   const [sensitivity, setSensitivity] = useState<MicSensitivity>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SENSITIVITY) as MicSensitivity;
-      return saved === 'high' || saved === 'medium' || saved === 'low' ? saved : 'high';
+      return saved === 'high' || saved === 'medium' || saved === 'low' ? saved : 'medium';
     } catch {
-      return 'high';
+      return 'medium';
     }
   });
 
@@ -105,44 +109,44 @@ export default function App() {
   }, [handleAlert]);
 
   // Toggle listening functionality
-  const handleToggleListening = async () => {
+  const handleToggleListening = () => {
     setErrorMessage(null);
     if (isListening) {
       audioClassifier.stopListening();
     } else {
-      try {
-        await audioClassifier.startListening();
-      } catch (err: any) {
-        console.error('Failed to start listening:', err);
-        setErrorMessage(err?.message || 'Could not access microphone');
-      }
+      // Pop up the disclaimer modal before initiating live audio capture
+      setIsDisclaimerOpen(true);
+    }
+  };
+
+  // Called when user acknowledges the disclaimer and confirms starting listening
+  const handleConfirmStartListening = async () => {
+    setIsDisclaimerOpen(false);
+    setErrorMessage(null);
+
+    // Every time listen is clicked, start from a fresh plate and clear all previous notifications
+    setNotifications([]);
+    try {
+      localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
+    } catch (e) {
+      // ignore
+    }
+
+    try {
+      await audioClassifier.startListening();
+    } catch (err: any) {
+      console.error('Failed to start listening:', err);
+      setErrorMessage(err?.message || 'Could not access microphone');
     }
   };
 
   const handleClearNotifications = () => {
     setNotifications([]);
-    localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
-  };
-
-  // For testing notification triggers
-  const handleSimulateTest = (
-    sound_name: string,
-    sound_type: any,
-    urgency: any,
-    description: string
-  ) => {
-    const testAlert: SoundAlert = {
-      id: `sim-${Date.now()}`,
-      timestamp: Date.now(),
-      sound_name,
-      sound_type,
-      urgency,
-      description,
-      direction_cue: 'center',
-      confidence: 0.96,
-      haptic_pattern: urgency === 'urgent' ? 'staccato_emergency' : 'double_pulse',
-    };
-    handleAlert(testAlert);
+    try {
+      localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
+    } catch (e) {
+      // ignore
+    }
   };
 
   return (
@@ -150,14 +154,19 @@ export default function App() {
       {/* Top Header Bar */}
       <header className="w-full border-b border-stone-200/80 bg-white/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          {/* Brand Wordmark (Zone 1) */}
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center text-white">
+          {/* Brand Wordmark: visuan */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-stone-900 flex items-center justify-center text-white shadow-xs">
               <Volume2 className="w-4 h-4" />
             </div>
-            <span className="font-bold text-sm sm:text-base tracking-tight text-stone-900 whitespace-nowrap">
-              Visual Soundboard
-            </span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-black text-lg tracking-tight text-stone-900 font-sans">
+                visuan
+              </span>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
+                tool
+              </span>
+            </div>
           </div>
 
           {/* Top Center: Circular Rectangle (Horizontal Oval) Red Stop Button when listening */}
@@ -169,13 +178,25 @@ export default function App() {
             )}
           </div>
 
-          {/* Settings Button (Top Right) */}
+          {/* Actions (Top Right) */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Always accessible Test Sounds button for judges and users */}
+            <button
+              type="button"
+              onClick={() => setIsTesterOpen(true)}
+              aria-label="Open sound tester modal"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 shadow-xs transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden sm:inline">Test Sounds</span>
+            </button>
+
+            {/* Settings Button */}
             <button
               type="button"
               onClick={() => setIsSettingsOpen(true)}
               aria-label="Open microphone settings"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-stone-700 bg-white hover:bg-stone-100 border border-stone-200 shadow-sm transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-stone-700 bg-white hover:bg-stone-100 border border-stone-200 shadow-xs transition-colors cursor-pointer"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-stone-500" />
               <span className="hidden sm:inline">Settings</span>
@@ -199,20 +220,28 @@ export default function App() {
             <SoundNotificationsList
               notifications={notifications}
               onClear={handleClearNotifications}
-              onSimulateTest={handleSimulateTest}
+              onOpenTester={() => setIsTesterOpen(true)}
               isAnalyzing={isAnalyzing}
             />
           </div>
         ) : (
-          /* Standby State: Central Listen Icon Button */
+          /* Standby State: Central Listen Icon Button with Fancy visuan Introduction */
           <div className="flex-1 flex flex-col items-center justify-center w-full">
             <ListenButton
               onStartListening={handleToggleListening}
+              onOpenTester={() => setIsTesterOpen(true)}
               statusMessage={statusMessage}
             />
           </div>
         )}
       </main>
+
+      {/* Sound Tester Modal for Judges & Hackathon Demo */}
+      <SoundTesterModal
+        isOpen={isTesterOpen}
+        onClose={() => setIsTesterOpen(false)}
+        onTriggerDetection={handleAlert}
+      />
 
       {/* Microphone Sensitivity Settings Modal */}
       <SettingsModal
@@ -221,6 +250,13 @@ export default function App() {
         sensitivity={sensitivity}
         onSelectSensitivity={handleSelectSensitivity}
         currentDecibels={audioMetrics.db}
+      />
+
+      {/* Audio Capture Disclaimer Modal */}
+      <AudioDisclaimerModal
+        isOpen={isDisclaimerOpen}
+        onClose={() => setIsDisclaimerOpen(false)}
+        onConfirm={handleConfirmStartListening}
       />
     </div>
   );

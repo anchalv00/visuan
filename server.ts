@@ -149,13 +149,23 @@ Comprehensive Target Sound Catalog:
    - "Dog Barking (Aggressive / Warning)": Staccato canine barks or warning growls.
    - "Water Running / Overflowing": Steady running faucet, splashing or boiling water.
 
-CLASSIFICATION RULES:
-- Use both the raw audio and the digital feature measurements (e.g. Spectral Centroid > 2400 Hz for bike bells/smoke alarms, Harmonic Ratio > 0.4 for sirens/crying, Percussive Score > 3.0 for door knocks).
-- If ANY siren sound is heard (wail, yelp, two-tone), immediately output the matching Emergency Siren name with urgency "urgent".
-- If a bike bell or scooter chime is heard, output the matching Bicycle Bell name with urgency "warning".
-- If an infant cry is heard, output "Baby Crying" with urgency "urgent".
-- If knuckles or knocking is heard, output "Door Knocking" with urgency "warning".
-- Only output "Ambient Background" with urgency "subtle" if the audio is purely quiet room silence, gentle fan hum, or static white noise.
+CRITICAL CLASSIFICATION & SENSITIVITY RULES:
+1. HIGH SENSITIVITY FOR VIDEO PLAYBACK & DISTANT SOUNDS: Audio is frequently played through video clips, phone speakers, TV, or recorded across a room. If characteristic acoustic patterns of an emergency siren (wail/yelp/hi-lo sweep), baby crying (infant distress/wail), bicycle bell (metallic ping), smoke alarm (beeps), or door knock are present in the audio—even if quiet, played through computer/laptop speakers, or slightly distant—you MUST classify it with high confidence (> 0.85) and appropriate urgency.
+2. STRICT SILENCE & AMBIENT NOISE FILTER: Only when there is truly NO identifiable sound event, and the audio is pure quiet room tone, gentle fan hum, microphone static, or silence, output:
+   {
+     "sound_name": "Ambient Background",
+     "sound_type": "ambient",
+     "urgency": "subtle",
+     "description": "Quiet ambient room tone or low noise floor",
+     "confidence": 0.1,
+     "direction_cue": "center",
+     "haptic_pattern": "gentle_thrum"
+   }
+   CRITICAL: DO NOT guess "Bicycle Bell" on pure high-frequency microphone hiss or static. But DO detect sirens, baby cries, bike bells, alarms, and knocks whenever they are audibly playing.
+3. SIREN VALIDATION: Detect rising/falling pitch sweeps, yelps, or alternating two-tones even if accompanied by video background noise.
+4. BABY CRYING VALIDATION: Detect infant vocalizations, distress cries, and wails even through phone or laptop audio playback.
+5. DOOR KNOCK VALIDATION: Detect rapid percussive knocks or raps.
+6. When an authentic target sound is present, output the matching target name with high confidence (> 0.85) and appropriate urgency tier.
 
 Directional hint: ${metadata.estimatedDirection || 'unknown'}.
 Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
@@ -277,19 +287,18 @@ wss.on('connection', async (clientWs: WebSocket) => {
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: [emitAudioAlertDeclaration] }],
           systemInstruction:
-            'You are Visual Soundboard, an environmental audio classifier trained specifically for Deaf and Hard of Hearing awareness. ' +
-            'Listen continuously to the ambient audio stream. Whenever you hear an ambient sound event, immediately call `emit_audio_alert`. ' +
-            'Primary target sounds to recognize without delay: ' +
-            '1. "Door Knocking": rhythmic rapping, knuckles on wood/door/table surface. ' +
+            'You are visuan, an environmental acoustic classifier for Deaf and Hard of Hearing awareness. ' +
+            'Listen to the ambient audio stream. When a distinct target environmental sound event occurs, immediately call `emit_audio_alert`. ' +
+            'Target sounds: ' +
+            '1. "Emergency Siren": police, ambulance, fire engine wailing or hi-lo sirens. ' +
             '2. "Baby Crying": infant distress wails, high-pitched sobbing or screams. ' +
-            '3. "Smoke Alarm": 3kHz-4kHz piercing T3 beep pattern or continuous detector alarm. ' +
-            '4. "Security Alarm": burglar alarm, alternating siren horn, evacuation alarm. ' +
-            '5. "Timers" / "Timer Beeping": microwave finish beeps, oven timer, countdown electronic chirps. ' +
-            '6. "Emergency Siren": police, ambulance, fire engine wailing or yelp sirens. ' +
+            '3. "Door Knocking": rhythmic rapping, knuckles on wood/door/table surface. ' +
+            '4. "Smoke Alarm": 3kHz piercing T3 beep pattern or detector alarm. ' +
+            '5. "Security Alarm": burglar alarm, alternating siren horn. ' +
+            '6. "Timers" / "Timer Beeping": microwave finish beeps, oven countdown chirps. ' +
             '7. "Car Honk": vehicle horn blast, sudden automotive warning. ' +
-            '8. "Bike Bell": high-pitch metallic ping, bicycle handlebar chime. ' +
-            '9. Also recognize: doorbell chime, dog barking, footsteps, glass breaking. ' +
-            'Call `emit_audio_alert` immediately upon detecting any of these sounds. Do not produce conversational speech. Respond only by triggering `emit_audio_alert`.',
+            '8. "Bicycle Bell": clear metallic ringing ping or handlebar ding-dong chime. ' +
+            'CRITICAL: If the room is quiet or there is only fan hum, typing, or microphone static, DO NOT trigger emit_audio_alert. Only trigger when a real, audible sound event is detected. Do not produce conversational speech.',
         },
         callbacks: {
           onmessage: async (msg: any) => {

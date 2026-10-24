@@ -119,23 +119,29 @@ export class AudioFeatureExtractor {
     }
 
     // 2. Spectral Centroid (Center of Spectral Mass)
-    const spectralCentroid = totalMagnitude > 0 ? Math.round(weightedSum / totalMagnitude) : 0;
+    // Only compute meaningful centroid if total energy exceeds ambient noise floor
+    const hasAudibleEnergy = totalMagnitude > 2.5;
+    const spectralCentroid = (hasAudibleEnergy && totalMagnitude > 0)
+      ? Math.round(weightedSum / totalMagnitude)
+      : 0;
 
     // 3. Spectral Rolloff (85% energy frequency)
     let rolloffSum = 0;
     const rolloffThreshold = totalMagnitude * 0.85;
     let spectralRolloff = 0;
-    for (let i = 0; i < numBins; i++) {
-      rolloffSum += magnitude[i];
-      if (rolloffSum >= rolloffThreshold) {
-        spectralRolloff = Math.round(i * binWidth);
-        break;
+    if (hasAudibleEnergy) {
+      for (let i = 0; i < numBins; i++) {
+        rolloffSum += magnitude[i];
+        if (rolloffSum >= rolloffThreshold) {
+          spectralRolloff = Math.round(i * binWidth);
+          break;
+        }
       }
     }
 
     // 4. Spectral Flux (Frame-to-Frame Transition Rate)
     let spectralFlux = 0;
-    if (this.prevSpectrum) {
+    if (this.prevSpectrum && hasAudibleEnergy) {
       for (let i = 0; i < numBins; i++) {
         const diff = magnitude[i] - this.prevSpectrum[i];
         if (diff > 0) spectralFlux += diff * diff;
@@ -180,7 +186,7 @@ export class AudioFeatureExtractor {
     // 8. Harmonic-to-Noise Ratio & Pitch Detection (Autocorrelation)
     let pitchEstimate = 0;
     let harmonicEnergyRatio = 0;
-    if (rawSamples && rawSamples.length > 512) {
+    if (hasAudibleEnergy && rawSamples && rawSamples.length > 512) {
       const corrLength = 512;
       let maxCorr = 0;
       let bestLag = 0;
@@ -194,7 +200,7 @@ export class AudioFeatureExtractor {
         norm0 += rawSamples[i] * rawSamples[i];
       }
 
-      if (norm0 > 0.001) {
+      if (norm0 > 0.005) {
         for (let lag = minLag; lag < maxLag && lag + corrLength < rawSamples.length; lag++) {
           let sum = 0;
           for (let i = 0; i < corrLength; i++) {
@@ -207,20 +213,23 @@ export class AudioFeatureExtractor {
         }
         const rNorm = maxCorr / norm0;
         harmonicEnergyRatio = Math.round(Math.max(0, Math.min(1, rNorm)) * 100) / 100;
-        if (rNorm > 0.4 && bestLag > 0) {
+        if (rNorm > 0.45 && bestLag > 0) {
           pitchEstimate = Math.round(this.sampleRate / bestLag);
         }
       }
     }
 
     // 9. Classify Acoustic Signature Hint
+    // Require genuine audible energy above noise floor and tone/transient contrast
     let estimatedCategoryHint = 'ambient';
-    if (percussiveScore > 3.5 && spectralFlux > 0.15) {
-      estimatedCategoryHint = 'percussive_knock';
-    } else if (spectralCentroid > 2500 && harmonicEnergyRatio > 0.5) {
-      estimatedCategoryHint = 'high_pitch_bell_or_alarm';
-    } else if (pitchEstimate >= 400 && pitchEstimate <= 1400 && harmonicEnergyRatio > 0.35) {
-      estimatedCategoryHint = 'tonal_siren_or_cry';
+    if (hasAudibleEnergy) {
+      if (percussiveScore > 4.2 && spectralFlux > 0.2) {
+        estimatedCategoryHint = 'percussive_knock';
+      } else if (spectralCentroid > 2400 && harmonicEnergyRatio > 0.55 && spectralFlatness < 0.35) {
+        estimatedCategoryHint = 'high_pitch_bell_or_alarm';
+      } else if (pitchEstimate >= 400 && pitchEstimate <= 1400 && harmonicEnergyRatio > 0.4 && spectralFlatness < 0.4) {
+        estimatedCategoryHint = 'tonal_siren_or_cry';
+      }
     }
 
     return {
