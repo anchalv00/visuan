@@ -1,10 +1,27 @@
+/**
+ * @file AudioDisclaimerModal.tsx
+ * @description Pre-Listening Live Audio Capture Notice Modal.
+ *
+ * How this file relates to the app's design & functionality:
+ * - Displayed immediately after the user clicks the circular "Listen" button on the home screen.
+ * - Sets transparent expectations that live microphone capture can be affected by hardware
+ *   filters, room echo, distance, or laptop speaker compression, and informs the user/judge
+ *   that they can also use the "Test Sounds" button on the next screen to test detection directly.
+ * - Upon clicking "Continue", `App.tsx` clears all previous notifications (starting from a
+ *   fresh slate) and activates the microphone.
+ */
+
 import React, { useEffect } from 'react';
 import { Mic, Volume2, X } from 'lucide-react';
 
 interface AudioDisclaimerModalProps {
+  /** Whether the disclaimer dialog is currently shown */
   isOpen: boolean;
+  /** Callback when the user cancels or dismisses the modal */
   onClose: () => void;
+  /** Callback when the user confirms and starts the live listening session */
   onConfirm: () => void;
+  /** Adapts the primary "Continue" button to Sky Blue when Colorblind Mode is active */
   colorBlindMode?: boolean;
 }
 
@@ -14,6 +31,7 @@ export const AudioDisclaimerModal: React.FC<AudioDisclaimerModalProps> = ({
   onConfirm,
   colorBlindMode = false,
 }) => {
+  // Allow keyboard users to dismiss the modal with the Escape key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {

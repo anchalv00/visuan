@@ -1,3 +1,19 @@
+/**
+ * @file SoundTesterModal.tsx
+ * @description Built-in Interactive Sound Generator & Detection Verifier Modal.
+ *
+ * How this file relates to the app's design & functionality:
+ * - Opened via the single "Test Sounds" button in the top navigation bar while listening is active.
+ * - Because live microphone hardware, room acoustics, and speaker compression can sometimes distort
+ *   external audio during a demo or evaluation, this modal lets judges and users trigger 10 known
+ *   environmental sounds (Sirens, Baby Crying, Door Knocking, Smoke Alarm, Kitchen Timer, Bicycle Bell,
+ *   Security Alarm, Car Horn, Doorbell).
+ * - Clicking any sound preset simultaneously:
+ *   1. Synthesizes and plays the authentic acoustic waveform through the speakers (`playSyntheticSound`).
+ *   2. Dispatches the corresponding `SoundAlert` (`onTriggerDetection`) so the user can immediately
+ *      verify the visual notification card and haptic vibration pattern.
+ */
+
 import React, { useState } from 'react';
 import { playSyntheticSound } from '../services/soundSynthesizer';
 import { SoundAlert } from '../types/sound';
@@ -17,14 +33,19 @@ import {
 } from 'lucide-react';
 
 interface SoundTesterModalProps {
+  /** Controls whether the Test Sounds modal is visible */
   isOpen: boolean;
+  /** Callback to close the modal */
   onClose: () => void;
+  /** Dispatches the detected SoundAlert into the main notifications feed and haptic engine */
   onTriggerDetection: (alert: SoundAlert) => void;
+  /** Adapts card icons and active states to the Okabe-Ito Blue/Orange colorblind palette */
   colorBlindMode?: boolean;
 }
 
 interface TestPreset {
   id: string;
+  /** Key mapped to the Web Audio recipe in `src/services/soundSynthesizer.ts` */
   presetKey: string;
   name: string;
   category: 'safety' | 'warning' | 'appliance' | 'biological';
@@ -38,10 +59,12 @@ export const SoundTesterModal: React.FC<SoundTesterModalProps> = ({
   onTriggerDetection,
   colorBlindMode = false,
 }) => {
+  /** Tracks which sound preset is currently playing so we can show a visual checkmark state */
   const [playingId, setPlayingId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
+  /** Catalog of 10 known environmental sounds available for instant testing */
   const presets: TestPreset[] = [
     {
       id: 'siren_wail',
@@ -125,6 +148,7 @@ export const SoundTesterModal: React.FC<SoundTesterModalProps> = ({
     },
   ];
 
+  /** Selects the matching category icon and applies standard or colorblind-safe colors */
   const getIcon = (id: string, urgency: string) => {
     const color = colorBlindMode
       ? urgency === 'urgent'
@@ -144,6 +168,9 @@ export const SoundTesterModal: React.FC<SoundTesterModalProps> = ({
     return <Bell className={`w-4 h-4 ${color}`} />;
   };
 
+  /**
+   * Plays the synthesized audio waveform and emits a verified `SoundAlert` to the main feed.
+   */
   const handleTestSound = (preset: TestPreset) => {
     setPlayingId(preset.id);
     playSyntheticSound(preset.presetKey);
@@ -198,7 +225,7 @@ export const SoundTesterModal: React.FC<SoundTesterModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
+        {/* Grid of Interactive Sound Presets */}
         <div className="p-5 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {presets.map((preset) => {

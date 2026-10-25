@@ -1,28 +1,47 @@
+/**
+ * @file MicrophoneController.tsx
+ * @description Primary Microphone Action Controls (`ListenButton` and `StopOvalButton`).
+ *
+ * How this file relates to the app's design & functionality:
+ * - `ListenButton` forms the centerpiece of the first intro screen (`!isListening`).
+ *   It pairs the bold `visuan` wordmark and simple accessibility mission statement with
+ *   an oversized, high-contrast circular button that anyone can immediately understand and tap.
+ * - `StopOvalButton` lives in the center of the top header bar on the second screen (`isListening`)
+ *   so users can immediately stop audio capture at any time.
+ * - Both components adapt their hover, border, and fill colors when `colorBlindMode` is active.
+ */
+
 import React from 'react';
 import { Mic, Square } from 'lucide-react';
 
 interface ListenButtonProps {
+  /** Triggered when the user taps the circular "Listen" button on the home screen */
   onStartListening: () => void;
+  /** Switches accent colors from Emerald to Sky Blue for colorblind accessibility */
   colorBlindMode?: boolean;
 }
 
+/**
+ * Home screen hero component displaying the `visuan` title, simple subtitle,
+ * and the primary circular "Listen" button.
+ */
 export const ListenButton: React.FC<ListenButtonProps> = ({
   onStartListening,
   colorBlindMode = false,
 }) => {
   return (
     <div className="w-full max-w-xl flex flex-col items-center justify-center select-none text-center px-6 py-12 animate-in fade-in duration-300">
-      {/* Fancy Title: visuan */}
+      {/* App Title: visuan */}
       <h1 className="text-6xl sm:text-7xl font-black tracking-tighter text-stone-900 mb-4">
         visuan
       </h1>
 
-      {/* Simple, accessible subtitle */}
+      {/* Simple, welcoming accessibility mission subtitle */}
       <p className="text-base sm:text-lg text-stone-600 max-w-md leading-relaxed mb-12 font-normal">
         The tool to make life more accessible for deaf and hard of hearing individuals.
       </p>
 
-      {/* Main Action: Clean Listen Button */}
+      {/* Main Action: Oversized Circular Listen Button */}
       <div className="relative flex flex-col items-center justify-center">
         <button
           type="button"
@@ -62,10 +81,16 @@ export const ListenButton: React.FC<ListenButtonProps> = ({
 };
 
 interface StopOvalButtonProps {
+  /** Triggered when the user taps "Stop" in the active listening header */
   onStopListening: () => void;
+  /** Uses high-contrast Orange instead of Red when Colorblind Mode is enabled */
   colorBlindMode?: boolean;
 }
 
+/**
+ * Compact pill button displayed in the top navigation bar while listening is active.
+ * Stops microphone capture and returns the user to the intro screen.
+ */
 export const StopOvalButton: React.FC<StopOvalButtonProps> = ({
   onStopListening,
   colorBlindMode = false,

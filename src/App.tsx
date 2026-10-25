@@ -3,6 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @file App.tsx
+ * @description Root Application Component & State Orchestrator for "visuan".
+ *
+ * How this file relates to the app's design & functionality:
+ * - Implements a clean, distraction-free two-screen workflow designed for Deaf and Hard of Hearing users:
+ *   1. **Intro Screen (`!isListening`)**: Displays only the bold `visuan` wordmark, a simple
+ *      human-centered mission statement, and a prominent circular "Listen" button.
+ *   2. **Active Listening Screen (`isListening`)**: Reveals a sticky top navigation bar containing
+ *      the `visuan` brand mark, the central "Stop" button, a single "Test Sounds" button, and
+ *      the "Settings" button, above the real-time `SoundNotificationsList` feed.
+ * - Subscribes to `audioClassifier` events (`subscribeAlert`, `subscribeMetrics`, `subscribeState`),
+ *   triggers physical vibrations via `triggerHaptic`, deduplicates rapid repeated alerts within
+ *   a 2-second window, and persists user settings (`sensitivity`, `colorBlindMode`) in `localStorage`.
+ */
+
 import React, { useCallback, useEffect, useState } from 'react';
 import { MicSensitivity, SoundAlert } from './types/sound';
 import { audioClassifier, AudioMetrics } from './services/audioClassifier';
@@ -14,14 +30,20 @@ import { SettingsModal } from './components/SettingsModal';
 import { AudioDisclaimerModal } from './components/AudioDisclaimerModal';
 import { SlidersHorizontal, Volume2 } from 'lucide-react';
 
+/** Keys used to persist user preferences and session notifications across browser reloads */
 const STORAGE_KEY_SENSITIVITY = 'visual_soundboard_sensitivity';
 const STORAGE_KEY_NOTIFICATIONS = 'visual_soundboard_notifications';
 const STORAGE_KEY_COLORBLIND = 'visual_soundboard_colorblind';
 
 export default function App() {
+  /** Tracks whether the microphone is actively capturing and classifying environmental sounds */
   const [isListening, setIsListening] = useState(false);
+  /** Controls visibility of the "Test Sounds" synthesizer modal */
   const [isTesterOpen, setIsTesterOpen] = useState(false);
+  /** Controls visibility of the pre-listening Live Audio Notice modal */
   const [isDisclaimerOpen, setIsDisclaimerOpen] = useState(false);
+
+  /** Chronological list of detected environmental sound alerts (newest first, capped at 50) */
   const [notifications, setNotifications] = useState<SoundAlert[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
@@ -31,6 +53,7 @@ export default function App() {
     }
   });
 
+  /** User-selected microphone sensitivity ('high' | 'medium' | 'low') */
   const [sensitivity, setSensitivity] = useState<MicSensitivity>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SENSITIVITY) as MicSensitivity;
@@ -40,6 +63,12 @@ export default function App() {
     }
   });
 
+  /**
+   * Colorblind Accessibility Mode (Okabe-Ito high-contrast Blue & Orange palette).
+   * When enabled, replaces standard Red/Amber/Emerald colors with Orange (`urgent`) and
+   * Sky Blue (`warning`/active UI) so users with Protanopia, Deuteranopia, or Tritanopia
+   * can immediately distinguish alert urgency.
+   */
   const [colorBlindMode, setColorBlindMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem(STORAGE_KEY_COLORBLIND) === 'true';
@@ -48,39 +77,52 @@ export default function App() {
     }
   });
 
+  /** Controls visibility of the Settings modal */
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  /** True while a 2.5-second WAV chunk is actively being analyzed by the backend */
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  /** Live 60fps microphone metrics (used to render the decibel level bar inside Settings) */
   const [audioMetrics, setAudioMetrics] = useState<AudioMetrics>({
     db: 0,
     frequencyData: new Uint8Array(0),
     timeDomainData: new Uint8Array(0),
     estimatedDirection: 'center',
   });
+  /** Displays user-friendly microphone permission or hardware error messages */
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Sync initial sensitivity state with the Web Audio pre-amplifier service
   useEffect(() => {
     audioClassifier.setSensitivity(sensitivity);
   }, [sensitivity]);
 
+  /** Updates microphone sensitivity both in React state, Web Audio GainNode, and localStorage */
   const handleSelectSensitivity = (newSensitivity: MicSensitivity) => {
     setSensitivity(newSensitivity);
     audioClassifier.setSensitivity(newSensitivity);
     try {
       localStorage.setItem(STORAGE_KEY_SENSITIVITY, newSensitivity);
     } catch {
-      // ignore
+      // Ignore storage quota errors in private browsing
     }
   };
 
+  /** Toggles Colorblind Mode and persists the setting in localStorage */
   const handleToggleColorBlindMode = (enabled: boolean) => {
     setColorBlindMode(enabled);
     try {
       localStorage.setItem(STORAGE_KEY_COLORBLIND, String(enabled));
     } catch {
-      // ignore
+      // Ignore storage quota errors
     }
   };
 
+  /**
+   * Callback invoked whenever a real microphone sound or a synthetic Test Sound is detected.
+   * 1. Fires a physical vibration pattern (`triggerHaptic`) matching the sound's urgency.
+   * 2. Deduplicates identical sound alerts arriving within 2,000ms of each other.
+   * 3. Prepends the new alert to the Notifications feed.
+   */
   const handleAlert = useCallback((alert: SoundAlert) => {
     triggerHaptic(alert.haptic_pattern, alert.urgency, 'medium');
 
@@ -92,12 +134,16 @@ export default function App() {
       try {
         localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(updated));
       } catch {
-        // ignore
+        // Ignore storage errors
       }
       return updated;
     });
   }, []);
 
+  /**
+   * Subscribes to the singleton `audioClassifier` service on mount and cleans up
+   * listeners on unmount.
+   */
   useEffect(() => {
     const unsubAlert = audioClassifier.subscribeAlert(handleAlert);
     const unsubMetrics = audioClassifier.subscribeMetrics((metrics) => {
@@ -120,6 +166,11 @@ export default function App() {
     };
   }, [handleAlert]);
 
+  /**
+   * Handles clicks on the main "Listen" or "Stop" button.
+   * When starting from the intro screen, opens the `AudioDisclaimerModal` first so the user
+   * understands live microphone limitations and knows about the "Test Sounds" feature.
+   */
   const handleToggleListening = () => {
     setErrorMessage(null);
     if (isListening) {
@@ -129,15 +180,21 @@ export default function App() {
     }
   };
 
+  /**
+   * Called when the user clicks "Continue" inside the Live Audio Notice modal.
+   * Clears previous notifications so every listening session starts with a fresh slate,
+   * then starts Web Audio capture.
+   */
   const handleConfirmStartListening = async () => {
     setIsDisclaimerOpen(false);
     setErrorMessage(null);
 
+    // Start from a fresh slate every time a new listening session begins
     setNotifications([]);
     try {
       localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
     } catch {
-      // ignore
+      // Ignore storage errors
     }
 
     try {
@@ -148,18 +205,19 @@ export default function App() {
     }
   };
 
+  /** Clears all current notifications from the feed */
   const handleClearNotifications = () => {
     setNotifications([]);
     try {
       localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
     } catch {
-      // ignore
+      // Ignore storage errors
     }
   };
 
   return (
     <div className="min-h-screen w-full bg-stone-50 text-stone-900 flex flex-col antialiased selection:bg-stone-200">
-      {/* Top Header Bar: Shown ONLY on the second page while listening */}
+      {/* Top Header Bar: Rendered ONLY on the second screen while actively listening */}
       {isListening && (
         <header className="w-full border-b border-stone-200/80 bg-white/90 backdrop-blur-md sticky top-0 z-40">
           <div className="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
@@ -168,7 +226,7 @@ export default function App() {
               visuan
             </span>
 
-            {/* Center: Stop Button */}
+            {/* Center: Stop Button to end the current listening session */}
             <div className="flex items-center justify-center">
               <StopOvalButton
                 onStopListening={handleToggleListening}
@@ -176,7 +234,7 @@ export default function App() {
               />
             </div>
 
-            {/* Right: Single Test Sounds Button & Settings Button */}
+            {/* Right: Consolidated "Test Sounds" Button & "Settings" Button */}
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
@@ -206,7 +264,7 @@ export default function App() {
         </header>
       )}
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-8 flex flex-col items-center justify-center">
         {errorMessage && (
           <div
@@ -221,6 +279,7 @@ export default function App() {
         )}
 
         {isListening ? (
+          /* Screen 2: Active Sound Notifications Feed */
           <div className="w-full flex-1 flex flex-col items-center justify-start py-2">
             <SoundNotificationsList
               notifications={notifications}
@@ -230,6 +289,7 @@ export default function App() {
             />
           </div>
         ) : (
+          /* Screen 1: Clean Intro Page with Title, Simple Subtitle, and Listen Button */
           <div className="flex-1 flex flex-col items-center justify-center w-full">
             <ListenButton
               onStartListening={handleToggleListening}
@@ -239,7 +299,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Sound Tester Modal */}
+      {/* Sound Tester Modal (accessible from the top bar while listening) */}
       <SoundTesterModal
         isOpen={isTesterOpen}
         onClose={() => setIsTesterOpen(false)}
@@ -247,7 +307,7 @@ export default function App() {
         colorBlindMode={colorBlindMode}
       />
 
-      {/* Settings Modal */}
+      {/* Settings Modal (Sensitivity & Colorblind Mode) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -258,7 +318,7 @@ export default function App() {
         currentDecibels={audioMetrics.db}
       />
 
-      {/* Audio Capture Disclaimer Modal */}
+      {/* Pre-Listening Live Audio Capture Notice Modal */}
       <AudioDisclaimerModal
         isOpen={isDisclaimerOpen}
         onClose={() => setIsDisclaimerOpen(false)}

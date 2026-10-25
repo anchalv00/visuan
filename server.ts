@@ -1,3 +1,27 @@
+/**
+ * @file server.ts
+ * @description Full-Stack Express & WebSocket Backend for "visuan".
+ *
+ * How this file relates to the app's design & functionality:
+ * 1. **Secure AI Proxy (`/api/classify-audio`)**:
+ *    Accepts 2.5-second 16kHz WAV audio clips and higher-order DSP features from the browser,
+ *    queries Google Gemini (`@google/genai`) using structured JSON output (`responseSchema`),
+ *    and returns a normalized `SoundAlert` object for the Notifications feed.
+ * 2. **Multi-Model Failover & Rate-Limit Protection**:
+ *    Tracks per-model cooldowns (`modelCooldownUntil`) across `gemini-3.8-flash`,
+ *    `gemini-3.1-flash-lite`, and `gemini-flash-latest`. If a model returns HTTP 429
+ *    (`RESOURCE_EXHAUSTED`), it is placed on a 45-second cooldown and the next model is
+ *    tried immediately.
+ * 3. **Deterministic DSP Fallback (`classifyFromAcousticFeatures`)**:
+ *    If all cloud models are temporarily rate-limited or offline during a live demo, the server
+ *    automatically classifies the sound using the client's mathematical DSP measurements
+ *    (Spectral Centroid, Fundamental Pitch F0, Harmonicity, and Percussive Score) so detection
+ *    never fails.
+ * 4. **Real-Time WebSocket Bridge (`/api/live`)**:
+ *    Streams live 16kHz PCM audio frames to the Gemini Live API (`gemini-3.8-live`) and emits
+ *    instant tool-call alerts back to the browser.
+ */
+
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -15,12 +39,16 @@ const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/api/live' });
 
+// Allow up to 25MB JSON payloads to accommodate base64-encoded uncompressed WAV audio chunks
 app.use(express.json({ limit: '25mb' }));
 
-// Port 3000 is required by the AI Studio environment so Nginx (listening on 8080) can proxy to it
+// Port 3000 is required by the AI Studio runtime environment
 const PORT = 3000;
 
-// Initialize Gemini Client
+/**
+ * Instantiates the Google Gen AI SDK client using the server-side `GEMINI_API_KEY`.
+ * Keeping this on the server ensures the API key is never exposed to the client browser.
+ */
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -36,7 +64,10 @@ const getGeminiClient = () => {
   });
 };
 
-// Tool declaration for structured environmental sound alerts
+/**
+ * Function declaration passed to the Gemini Live API (`/api/live`) so the model can invoke
+ * structured tool calls whenever it hears a target sound in the real-time audio stream.
+ */
 const emitAudioAlertDeclaration = {
   name: 'emit_audio_alert',
   description: 'Trigger a visual and haptic alert when an environmental, safety, appliance, biological, animal, or emotional/social sound is detected in ambient audio.',
@@ -76,7 +107,7 @@ const emitAudioAlertDeclaration = {
   },
 };
 
-// Status API
+/** Health-check endpoint used to verify backend readiness */
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -85,9 +116,22 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Track per-model rate limit cooldowns to prevent repeated 429 hits
+/**
+ * In-memory map tracking when a rate-limited model is allowed to be called again:
+ * `Map<modelName, timestampWhenCooldownExpiresMs>`.
+ */
 const modelCooldownUntil = new Map<string, number>();
 
+/**
+ * Deterministic DSP Acoustic Fallback Classifier.
+ *
+ * Why this function exists:
+ * If cloud API quotas (HTTP 429) are temporarily exhausted during heavy testing, we still
+ * have the mathematical DSP features computed by `src/services/audioFeatures.ts`.
+ * This function evaluates Spectral Centroid, Fundamental Pitch (F0), Harmonic Energy Ratio,
+ * and Percussive Crest Score to classify Sirens, Smoke Alarms, Bicycle Bells, Baby Crying,
+ * and Door Knocking without requiring an external network call.
+ */
 function classifyFromAcousticFeatures(metadata: any) {
   const features = metadata?.features || {};
   const direction = metadata?.estimatedDirection || 'center';
@@ -98,6 +142,7 @@ function classifyFromAcousticFeatures(metadata: any) {
   const harmonic = features.harmonicEnergyRatio || 0;
   const percussive = features.percussiveScore || 0;
 
+  // 1. Emergency Siren: Strong harmonic pitch between 500 Hz and 1650 Hz
   if (hint === 'siren' || (pitch >= 500 && pitch <= 1650 && harmonic > 0.35 && db >= 30)) {
     return {
       sound_name: 'Emergency Siren (Wail)',
@@ -110,7 +155,8 @@ function classifyFromAcousticFeatures(metadata: any) {
     };
   }
 
-  if (hint === 'alarm_or_bell' || (centroid > 2400 && harmonic > 0.32 && db >= 30)) {
+  // 2. High-Frequency Tonal Event (> 2400 Hz Spectral Centroid): Smoke Alarm (~3100 Hz) or Bicycle Bell (~2600 Hz)
+  if (hint === 'alarm_or_bell' || hint === 'high_pitch_bell_or_alarm' || (centroid > 2400 && harmonic > 0.32 && db >= 30)) {
     if (pitch > 2600 || centroid > 3100) {
       return {
         sound_name: 'Smoke Alarm (T3 Temporal)',
@@ -133,7 +179,8 @@ function classifyFromAcousticFeatures(metadata: any) {
     };
   }
 
-  if (hint === 'crying' || (centroid >= 1000 && centroid <= 2450 && pitch >= 350 && pitch <= 950 && harmonic > 0.28 && db >= 30)) {
+  // 3. Baby Crying: Harmonic vocalizations with F0 in 350–950 Hz and mid-high centroid
+  if (hint === 'crying' || hint === 'tonal_siren_or_cry' || (centroid >= 1000 && centroid <= 2450 && pitch >= 350 && pitch <= 950 && harmonic > 0.28 && db >= 30)) {
     return {
       sound_name: 'Baby Crying (Distress / Pain)',
       sound_type: 'biological',
@@ -145,7 +192,8 @@ function classifyFromAcousticFeatures(metadata: any) {
     };
   }
 
-  if (hint === 'knock_or_transient' || (percussive > 3.0 && centroid >= 250 && centroid <= 2200 && db >= 30)) {
+  // 4. Door Knocking: High percussive crest factor (> 3.0) with wooden mid-band resonance
+  if (hint === 'knock_or_transient' || hint === 'percussive_knock' || (percussive > 3.0 && centroid >= 250 && centroid <= 2200 && db >= 30)) {
     return {
       sound_name: 'Door Knocking',
       sound_type: 'warning',
@@ -157,6 +205,7 @@ function classifyFromAcousticFeatures(metadata: any) {
     };
   }
 
+  // 5. Default: Quiet room tone / background noise (ignored by client notification feed)
   return {
     sound_name: 'Ambient Background',
     sound_type: 'ambient',
@@ -168,7 +217,11 @@ function classifyFromAcousticFeatures(metadata: any) {
   };
 }
 
-// REST Endpoint: Fast Audio Chunk Classification with gemini-3.8-flash
+/**
+ * POST `/api/classify-audio`
+ * Multimodal audio classification endpoint. Combines raw inline WAV audio data with
+ * our DSP feature summary and enforces a strict JSON schema response.
+ */
 app.post('/api/classify-audio', async (req, res) => {
   try {
     const { audioData, mimeType = 'audio/webm', metadata = {} } = req.body;
@@ -179,6 +232,7 @@ app.post('/api/classify-audio', async (req, res) => {
 
     const ai = getGeminiClient();
 
+    // Format the client's DSP features into readable technical context for the prompt
     const features = metadata.features || {};
     const featuresSummary = features.spectralCentroid
       ? `\nHigher-Order Digital Acoustic Feature Measurements:
@@ -253,6 +307,7 @@ CRITICAL CLASSIFICATION & SENSITIVITY RULES:
 Directional hint: ${metadata.estimatedDirection || 'unknown'}.
 Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
 
+    // Ordered list of multimodal Flash models to try; skips any model currently in a 429 cooldown
     const candidateModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
     let response: any = null;
     const now = Date.now();
@@ -309,10 +364,10 @@ Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
         const status = err?.status || err?.code || '';
         const msg = String(err?.message || '');
         if (status === 429 || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) {
-          // Place model on 45-second cooldown to avoid hitting 429 repeatedly
+          // Place rate-limited model on a 45-second cooldown so subsequent requests immediately use the next model
           modelCooldownUntil.set(model, Date.now() + 45_000);
         } else {
-          // Brief 15-second cooldown for transient model errors
+          // Brief 15-second cooldown for transient errors
           modelCooldownUntil.set(model, Date.now() + 15_000);
         }
       }
@@ -342,7 +397,7 @@ Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
       },
     });
   } catch (error: any) {
-    // Return graceful acoustic fallback instead of 500 error
+    // Always return a valid response using DSP fallback rather than crashing with HTTP 500
     const fallbackResult = classifyFromAcousticFeatures(req.body?.metadata);
     res.json({
       success: true,
@@ -356,7 +411,12 @@ Decibel level: ${metadata.decibels ? `${metadata.decibels} dB` : 'unknown'}.`;
   }
 });
 
-// WebSocket Live Stream Handling
+/**
+ * WebSocket `/api/live` Handler:
+ * Establishes a bidirectional session with `gemini-3.8-live` and forwards 16kHz PCM audio frames
+ * from the browser microphone. When Gemini calls `emit_audio_alert`, the alert is pushed down
+ * the WebSocket to the client UI.
+ */
 wss.on('connection', async (clientWs: WebSocket) => {
   console.log('Client connected to /api/live WebSocket');
 
@@ -397,7 +457,7 @@ wss.on('connection', async (clientWs: WebSocket) => {
         },
         callbacks: {
           onmessage: async (msg: any) => {
-            // Check for tool calls
+            // Inspect incoming Live messages for `emit_audio_alert` tool invocations
             const toolCall = msg.toolCall;
             if (toolCall) {
               const calls = toolCall.functionCalls;
@@ -417,7 +477,7 @@ wss.on('connection', async (clientWs: WebSocket) => {
                       })
                     );
 
-                    // Acknowledge function call to live session
+                    // Acknowledge function call completion to the Gemini Live session
                     if (liveSession?.sendToolResponse) {
                       await liveSession.sendToolResponse({
                         functionResponses: [
@@ -433,7 +493,7 @@ wss.on('connection', async (clientWs: WebSocket) => {
               }
             }
 
-            // Also check if text / transcription was generated
+            // Forward optional text transcripts if present
             const textPart = msg.serverContent?.modelTurn?.parts?.find((p: any) => p.text);
             if (textPart?.text) {
               clientWs.send(
@@ -469,6 +529,7 @@ wss.on('connection', async (clientWs: WebSocket) => {
 
   await initLiveSession();
 
+  // Forward incoming 16kHz PCM audio frames from the browser to the active Gemini Live session
   clientWs.on('message', async (data: Buffer | string) => {
     try {
       const parsed = JSON.parse(data.toString());
@@ -486,7 +547,7 @@ wss.on('connection', async (clientWs: WebSocket) => {
         clientWs.send(JSON.stringify({ type: 'pong' }));
       }
     } catch (e) {
-      // Ignore parse errors on ping
+      // Ignore malformed JSON frames
     }
   });
 
@@ -495,13 +556,15 @@ wss.on('connection', async (clientWs: WebSocket) => {
       try {
         liveSession.close();
       } catch (e) {
-        // cleanup ignore
+        // Ignore cleanup errors
       }
     }
   });
 });
 
-// Setup Vite or static serving
+/**
+ * Mounts Vite dev middleware in development or serves static compiled assets in production.
+ */
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
 

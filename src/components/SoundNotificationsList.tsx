@@ -1,3 +1,19 @@
+/**
+ * @file SoundNotificationsList.tsx
+ * @description Real-Time Visual Sound Notification Feed.
+ *
+ * How this file relates to the app's design & functionality:
+ * - Renders the core visual output of `visuan` on the second screen (`isListening`).
+ * - Whenever a sound is detected (either via live microphone capture or the "Test Sounds"
+ *   button in the top header), it appears at the top of this list with:
+ *   1. An intuitive category icon (`Siren`, `Baby`, `Flame`, `DoorClosed`, `Bell`, `Clock`, `Car`).
+ *   2. A bold urgency badge (`Urgent`, `Alert`, or `Notice`).
+ *   3. A relative timestamp (`Just now`, `12s ago`, `3m ago`).
+ *   4. A plain-English description of the acoustic pattern.
+ * - Supports Colorblind Mode by switching from Red/Amber/Emerald to high-contrast
+ *   Okabe-Ito Orange (`urgent`) and Sky Blue (`warning`).
+ */
+
 import React from 'react';
 import { SoundAlert } from '../types/sound';
 import {
@@ -14,9 +30,13 @@ import {
 } from 'lucide-react';
 
 interface SoundNotificationsListProps {
+  /** Array of detected sound alerts ordered from newest to oldest */
   notifications: SoundAlert[];
+  /** Callback to clear all notifications from state and localStorage */
   onClear: () => void;
+  /** Indicates whether a 2.5s audio chunk is currently being classified */
   isAnalyzing?: boolean;
+  /** Enables Okabe-Ito Blue & Orange high-contrast palette for colorblind users */
   colorBlindMode?: boolean;
 }
 
@@ -26,6 +46,10 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
   isAnalyzing = false,
   colorBlindMode = false,
 }) => {
+  /**
+   * Maps a sound's name and urgency level to a recognizable Lucide icon and accessible color class.
+   * Pairing distinct icons with color badges ensures users never have to rely on color alone.
+   */
   const getSoundIcon = (name: string, urgency: string) => {
     const lower = name.toLowerCase();
     const iconColor = colorBlindMode
@@ -59,6 +83,10 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
     return <Volume2 className={`w-5 h-5 ${iconColor}`} />;
   };
 
+  /**
+   * Renders a high-contrast urgency pill (`Urgent`, `Alert`, `Notice`) so Deaf and Hard of Hearing
+   * users can assess how quickly they need to react at a single glance.
+   */
   const getUrgencyLabel = (urgency: string) => {
     if (urgency === 'urgent') {
       return (
@@ -93,6 +121,9 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
     );
   };
 
+  /**
+   * Formats a Unix millisecond timestamp into a human-friendly relative string.
+   */
   const formatTimestamp = (ts: number) => {
     const diff = Math.floor((Date.now() - ts) / 1000);
     if (diff < 5) return 'Just now';
@@ -105,7 +136,7 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
 
   return (
     <div className="w-full max-w-xl mx-auto flex flex-col gap-4 animate-in fade-in duration-300">
-      {/* Clean Section Header */}
+      {/* Section Header with Notification Count, Live Analyzing Indicator, and Clear Button */}
       <div className="flex items-center justify-between pb-3 border-b border-stone-200">
         <div className="flex items-center gap-2.5">
           <h2 className="text-lg font-bold text-stone-900 tracking-tight">
@@ -137,7 +168,7 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
         )}
       </div>
 
-      {/* Notifications Feed */}
+      {/* Empty State vs. Populated Notification Cards */}
       {notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <div
@@ -159,6 +190,7 @@ export const SoundNotificationsList: React.FC<SoundNotificationsListProps> = ({
       ) : (
         <div className="flex flex-col gap-3">
           {notifications.map((alert, index) => {
+            // Card border and background tint adapt to both urgency and Colorblind Mode
             const cardStyle = colorBlindMode
               ? alert.urgency === 'urgent'
                 ? 'border-orange-500 bg-orange-50/40 ring-1 ring-orange-500/30'

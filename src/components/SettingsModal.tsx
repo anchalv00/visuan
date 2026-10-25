@@ -1,14 +1,36 @@
+/**
+ * @file SettingsModal.tsx
+ * @description Accessibility & Microphone Sensitivity Configuration Modal.
+ *
+ * How this file relates to the app's design & functionality:
+ * - Accessible from the top header bar on the active listening screen.
+ * - Provides two essential accessibility controls:
+ *   1. **Colorblind Mode Toggle**: Switches all notification cards, urgency badges, and
+ *      interactive buttons from Red/Amber/Emerald to a scientifically validated Okabe-Ito
+ *      high-contrast Blue & Orange palette, complete with live preview swatches.
+ *   2. **Microphone Sensitivity Selector (`High`, `Medium`, `Low`)**: Adjusts the Web Audio
+ *      pre-amp gain and decibel trigger thresholds in `audioClassifier.ts`, accompanied by
+ *      a live decibel (dB) level meter so users can see their room's noise floor in real time.
+ */
+
 import React from 'react';
 import { MicSensitivity } from '../types/sound';
 import { Check, Eye, Mic, SlidersHorizontal, X } from 'lucide-react';
 
 interface SettingsModalProps {
+  /** Whether the modal dialog is currently open */
   isOpen: boolean;
+  /** Callback to close the modal */
   onClose: () => void;
+  /** Currently active microphone sensitivity preset */
   sensitivity: MicSensitivity;
+  /** Updates microphone sensitivity in state, localStorage, and Web Audio GainNode */
   onSelectSensitivity: (sensitivity: MicSensitivity) => void;
+  /** Whether the Okabe-Ito Blue/Orange colorblind palette is active */
   colorBlindMode: boolean;
+  /** Toggles Colorblind Mode on or off */
   onToggleColorBlindMode: (enabled: boolean) => void;
+  /** Live Sound Pressure Level (SPL) reading in decibels from the microphone */
   currentDecibels?: number;
 }
 
@@ -23,6 +45,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  /** Sensitivity presets corresponding to gain/threshold values in `audioClassifier.ts` */
   const options: {
     id: MicSensitivity;
     title: string;
@@ -78,7 +101,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 space-y-6">
-          {/* Colorblind Mode Toggle */}
+          {/* 1. Colorblind Mode Toggle & Live Swatch Preview */}
           <div className="space-y-3">
             <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block">
               Visual Accessibility
@@ -114,6 +137,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Animated Toggle Switch */}
               <div
                 className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
                   colorBlindMode ? 'bg-sky-600' : 'bg-stone-300'
@@ -127,7 +151,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </button>
 
-            {/* Preview Swatches */}
+            {/* Live Color Swatches showing how Urgent, Alert, and Active UI look */}
             <div className="flex items-center gap-2 text-xs text-stone-500 pt-1">
               <span>Preview:</span>
               <span
@@ -160,7 +184,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Sensitivity Selection */}
+          {/* 2. Microphone Sensitivity Selector */}
           <div className="space-y-2.5">
             <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block">
               Microphone Sensitivity
@@ -209,7 +233,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Live Microphone Level */}
+          {/* 3. Real-Time Microphone Decibel Meter */}
           <div className="pt-2 border-t border-stone-100">
             <div className="flex items-center justify-between text-xs font-medium text-stone-600 mb-2">
               <span className="flex items-center gap-1.5">
