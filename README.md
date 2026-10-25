@@ -1,4 +1,4 @@
-# Visual Soundboard
+# Visual Soundboard: visuan
 
 A minimalist ambient audio listener that captures environmental sounds through your microphone and uses Gemini Live audio classification to detect key acoustic events with real-time feedback and tactile haptics.
 
