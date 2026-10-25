@@ -1,12 +1,14 @@
 import React from 'react';
 import { MicSensitivity } from '../types/sound';
-import { Check, Mic, SlidersHorizontal, X, Volume2 } from 'lucide-react';
+import { Check, Eye, Mic, SlidersHorizontal, X } from 'lucide-react';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   sensitivity: MicSensitivity;
   onSelectSensitivity: (sensitivity: MicSensitivity) => void;
+  colorBlindMode: boolean;
+  onToggleColorBlindMode: (enabled: boolean) => void;
   currentDecibels?: number;
 }
 
@@ -15,6 +17,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   sensitivity,
   onSelectSensitivity,
+  colorBlindMode,
+  onToggleColorBlindMode,
   currentDecibels = 0,
 }) => {
   if (!isOpen) return null;
@@ -22,33 +26,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const options: {
     id: MicSensitivity;
     title: string;
-    badge?: string;
     description: string;
-    idealFor: string;
   }[] = [
     {
       id: 'high',
-      title: 'High Sensitivity',
-      badge: 'Sensitive',
-      description:
-        'Detects softer acoustic events like gentle door knocking, distant timers, quiet baby whimpering, and bicycle bells.',
-      idealFor: 'Quiet rooms, home offices, and nighttime monitoring.',
+      title: 'High',
+      description: 'Detects quiet sounds like gentle knocks and distant bells.',
     },
     {
       id: 'medium',
-      title: 'Medium Sensitivity',
-      badge: 'Recommended',
-      description:
-        'Balanced baseline for typical living spaces. Captures standard door knocks, kitchen timers, crying, alarms, and car honks.',
-      idealFor: 'Standard household environments.',
+      title: 'Medium',
+      description: 'Balanced detection for everyday rooms and homes.',
     },
     {
       id: 'low',
-      title: 'Low Sensitivity',
-      badge: 'Noisy Rooms',
-      description:
-        'Reduces sensitivity to avoid false alerts in busy areas. Only triggers on loud sirens, smoke alarms, emergency alarms, and heavy honks.',
-      idealFor: 'Cafes, busy streets, or noisy apartments.',
+      title: 'Low',
+      description: 'Only triggers on loud sounds like sirens and smoke alarms.',
     },
   ];
 
@@ -57,26 +50,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-200"
+      onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-stone-200 overflow-hidden animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-md bg-white rounded-2xl shadow-xl border border-stone-200 overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-stone-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-stone-100 flex items-center justify-center text-stone-700">
-              <SlidersHorizontal className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 id="settings-title" className="text-base font-bold text-stone-900">
-                Microphone Settings
-              </h2>
-              <p className="text-xs text-stone-500">
-                Adjust detection threshold for your environment
-              </p>
-            </div>
+            <SlidersHorizontal className="w-4 h-4 text-stone-700" />
+            <h2 id="settings-title" className="text-base font-bold text-stone-900">
+              Settings
+            </h2>
           </div>
 
           <button
@@ -90,106 +77,172 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-5">
-          {/* Sensitivity Radio Cards */}
+        <div className="p-6 space-y-6">
+          {/* Colorblind Mode Toggle */}
           <div className="space-y-3">
             <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block">
-              Microphone Sensitivity Level
+              Visual Accessibility
             </label>
-
-            {options.map((opt) => {
-              const isSelected = sensitivity === opt.id;
-              return (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={colorBlindMode}
+              onClick={() => onToggleColorBlindMode(!colorBlindMode)}
+              className={`w-full p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                colorBlindMode
+                  ? 'border-sky-600 bg-sky-50/50'
+                  : 'border-stone-200 bg-white hover:border-stone-300'
+              }`}
+            >
+              <div className="flex items-start gap-3">
                 <div
-                  key={opt.id}
-                  onClick={() => onSelectSensitivity(opt.id)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                    isSelected
-                      ? 'border-emerald-500 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500/30'
-                      : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50/60'
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                    colorBlindMode
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-stone-100 text-stone-600'
                   }`}
                 >
-                  <div
-                    className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                      isSelected
-                        ? 'border-emerald-600 bg-emerald-600 text-white'
-                        : 'border-stone-300 bg-white'
-                    }`}
-                  >
-                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="text-sm font-bold text-stone-900">
-                        {opt.title}
-                      </span>
-                      {opt.badge && (
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                            opt.id === 'medium'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-stone-100 text-stone-600 border border-stone-200'
-                          }`}
-                        >
-                          {opt.badge}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-stone-600 leading-relaxed mb-1.5">
-                      {opt.description}
-                    </p>
-                    <p className="text-[11px] text-stone-400 font-medium">
-                      Best for: {opt.idealFor}
-                    </p>
-                  </div>
+                  <Eye className="w-4 h-4" />
                 </div>
-              );
-            })}
+                <div>
+                  <span className="text-sm font-bold text-stone-900 block">
+                    Colorblind Mode
+                  </span>
+                  <span className="text-xs text-stone-500 block mt-0.5">
+                    Uses high-contrast blue and orange colors for notifications and buttons.
+                  </span>
+                </div>
+              </div>
+
+              <div
+                className={`w-11 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+                  colorBlindMode ? 'bg-sky-600' : 'bg-stone-300'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${
+                    colorBlindMode ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </div>
+            </button>
+
+            {/* Preview Swatches */}
+            <div className="flex items-center gap-2 text-xs text-stone-500 pt-1">
+              <span>Preview:</span>
+              <span
+                className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
+                  colorBlindMode
+                    ? 'bg-orange-600 text-white'
+                    : 'bg-red-100 text-red-700'
+                }`}
+              >
+                Urgent
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded font-semibold uppercase text-[10px] ${
+                  colorBlindMode
+                    ? 'bg-sky-100 text-sky-900 border border-sky-300'
+                    : 'bg-amber-100 text-amber-800'
+                }`}
+              >
+                Alert
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded font-semibold uppercase text-[10px] ${
+                  colorBlindMode
+                    ? 'bg-sky-700 text-white'
+                    : 'bg-emerald-600 text-white'
+                }`}
+              >
+                Active UI
+              </span>
+            </div>
           </div>
 
-          {/* Real-time Decibel Meter Preview */}
-          <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80">
-            <div className="flex items-center justify-between text-xs font-semibold text-stone-700 mb-2">
-              <div className="flex items-center gap-1.5">
-                <Mic className="w-3.5 h-3.5 text-stone-500" />
-                <span>Live Microphone Input</span>
-              </div>
-              <span className="font-mono text-stone-600 tabular-nums">
+          {/* Sensitivity Selection */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-bold text-stone-500 uppercase tracking-wider block">
+              Microphone Sensitivity
+            </label>
+
+            <div className="space-y-2">
+              {options.map((opt) => {
+                const isSelected = sensitivity === opt.id;
+                const activeBorder = colorBlindMode
+                  ? 'border-sky-600 bg-sky-50/40'
+                  : 'border-emerald-600 bg-emerald-50/40';
+                const activeCheck = colorBlindMode
+                  ? 'border-sky-600 bg-sky-600 text-white'
+                  : 'border-emerald-600 bg-emerald-600 text-white';
+
+                return (
+                  <button
+                    type="button"
+                    key={opt.id}
+                    onClick={() => onSelectSensitivity(opt.id)}
+                    className={`w-full p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                      isSelected
+                        ? activeBorder
+                        : 'border-stone-200 bg-white hover:border-stone-300'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                        isSelected ? activeCheck : 'border-stone-300 bg-white'
+                      }`}
+                    >
+                      {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-stone-900">
+                        {opt.title}
+                      </div>
+                      <p className="text-xs text-stone-500">
+                        {opt.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Live Microphone Level */}
+          <div className="pt-2 border-t border-stone-100">
+            <div className="flex items-center justify-between text-xs font-medium text-stone-600 mb-2">
+              <span className="flex items-center gap-1.5">
+                <Mic className="w-3.5 h-3.5 text-stone-400" />
+                Microphone Level
+              </span>
+              <span className="font-mono tabular-nums">
                 {currentDecibels > 0 ? `${currentDecibels} dB` : 'Idle'}
               </span>
             </div>
-
-            {/* Meter Bar */}
-            <div className="w-full h-2 rounded-full bg-stone-200 overflow-hidden">
+            <div className="w-full h-2 rounded-full bg-stone-100 overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-100"
+                className={`h-full transition-all duration-100 ${
+                  colorBlindMode ? 'bg-sky-600' : 'bg-emerald-600'
+                }`}
                 style={{
                   width: `${Math.min(100, Math.max(4, (currentDecibels / 100) * 100))}%`,
                 }}
               />
             </div>
-            <p className="text-[11px] text-stone-400 mt-2">
-              Make a sound (knock on desk or speak) to verify your microphone responsiveness.
-            </p>
           </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-stone-50 border-t border-stone-100 flex items-center justify-end gap-3">
+        <div className="px-6 py-4 bg-stone-50 border-t border-stone-100 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close settings"
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 border border-stone-200 transition-colors cursor-pointer"
-          >
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Save and close settings"
-            className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-stone-900 hover:bg-stone-800 transition-colors shadow-sm cursor-pointer"
+            className={`px-5 py-2 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer ${
+              colorBlindMode
+                ? 'bg-sky-700 hover:bg-sky-800'
+                : 'bg-stone-900 hover:bg-stone-800'
+            }`}
           >
             Done
           </button>

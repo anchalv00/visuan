@@ -374,7 +374,9 @@ class AudioClassifierService {
       // Low: triggers on louder sounds > 38 dB or maxPeak > 12
       const dbThreshold = this.micSensitivity === 'high' ? 27 : this.micSensitivity === 'low' ? 38 : 31;
       const peakThreshold = this.micSensitivity === 'high' ? 5 : this.micSensitivity === 'low' ? 12 : 7;
-      const minInterval = this.micSensitivity === 'high' ? 1100 : this.micSensitivity === 'low' ? 2000 : 1400;
+      // Pace HTTP classification requests so the first onset triggers immediately,
+      // while sustained sounds don't flood the API and trigger 429 rate limits
+      const minInterval = this.micSensitivity === 'high' ? 2400 : this.micSensitivity === 'low' ? 3600 : 2800;
 
       // Smart acoustic signature triggers
       const isAcousticTarget = features.estimatedCategoryHint !== 'ambient';
@@ -384,8 +386,8 @@ class AudioClassifierService {
       const hasAudibleSound = db >= dbThreshold || maxPeak >= peakThreshold;
 
       if (
-        ((isAcousticTarget && timeSinceLast > 900) ||
-          (isTransientKnock && timeSinceLast > 900) ||
+        ((isAcousticTarget && timeSinceLast > 2000) ||
+          (isTransientKnock && timeSinceLast > 2000) ||
           (hasAudibleSound && timeSinceLast > minInterval)) &&
         !this.isClassifying &&
         this.samplesRecorded >= this.SAMPLE_RATE * 0.7
@@ -404,7 +406,7 @@ class AudioClassifierService {
     currentDb: number = 60,
     extractedFeatures?: HigherOrderAudioFeatures
   ) {
-    if (this.isClassifying || this.samplesRecorded < this.SAMPLE_RATE * 0.8) return;
+    if (this.isClassifying || this.samplesRecorded < this.SAMPLE_RATE * 0.7) return;
     this.isClassifying = true;
     this.lastAnalysisTime = Date.now();
     this.notifyState('analyzing');
